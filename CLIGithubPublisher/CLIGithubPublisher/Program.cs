@@ -155,24 +155,39 @@ namespace CLIGithubPublisher
 
 
                 Console.WriteLine("Start sending asset to: " + assets_url + "?name=" + Path.GetFileName(filepath));
-                string responseInString = "404";
-                using (var wb = new WebClient())
-                {
-                    wb.Headers.Add("User-Agent", "CLIGithubPublisher");
-                    wb.Headers.Add("Content-Type", "application/zip");
-                    var response = wb.UploadData(assets_url + "?name=" + Path.GetFileName(filepath) + "&access_token=" + token, "POST", file);
 
-                    responseInString = Encoding.UTF8.GetString(response);
+                var request = (HttpWebRequest)WebRequest.Create(assets_url + "?name=" + Path.GetFileName(filepath) + "&access_token=" + token);
+
+                request.Method = "POST";
+                request.UserAgent = "CLIGithubPublisher";
+                request.ContentType = "application/zip";
+                request.Timeout = 60 * 60 * 1000;
+                request.ContentLength = file.Length;
+
+                using (var stream = request.GetRequestStream())
+                {
+                    stream.Write(file, 0, file.Length);
                 }
 
-                if (responseInString.Contains("201"))
+                var response = (HttpWebResponse)request.GetResponse();
+
+                var responseString = new StreamReader(response.GetResponseStream()).ReadToEnd();
+
+
+                if (response.StatusCode == HttpStatusCode.Created)
                 {
                     Console.WriteLine("Succesfully published release!");
+
+                    Console.WriteLine(responseString);
+
                     return true;
-
                 }
+                else
+                {
+                    Console.WriteLine("Failed publishing release with error: " + response.StatusCode.ToString());
 
-                return false;
+                    return false;
+                }
                     /*    HttpResponseMessage uploadstatus = client.PostAsync(assets_url + "?name=" + Path.GetFileName(filepath) + "&access_token=" + token, byteContent).Result;
 
 
@@ -208,6 +223,11 @@ namespace CLIGithubPublisher
 
                 return false;
             }
+        }
+
+        private static void WebClientUploadProgressChanged(object sender, UploadProgressChangedEventArgs e)
+        {
+            Console.WriteLine("Upload {0}% complete. ", e.ProgressPercentage);
         }
     }
 }
