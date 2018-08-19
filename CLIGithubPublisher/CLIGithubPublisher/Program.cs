@@ -90,9 +90,8 @@ namespace CLIGithubPublisher
                 Console.WriteLine(JObject.FromObject(release).ToString(Formatting.Indented));
 
 
-                Task t = new Task(async () => await PublishRelease(release, token, repo, repo_owner, filepath));
-                t.Start();
-                t.Wait();
+                bool success = PublishRelease(release, token, repo, repo_owner, filepath);
+                Console.Write("Finished!");
 
             }
             else
@@ -124,29 +123,34 @@ namespace CLIGithubPublisher
             
         }
 
-        private static async Task PublishRelease(ReleaseJSON release, string token, string repo, string repo_owner, string filepath) {
+        private static bool PublishRelease(ReleaseJSON release, string token, string repo, string repo_owner, string filepath) {
 
             client.DefaultRequestHeaders.Add("User-Agent", "CLIGithubPublisher");
 
             Console.WriteLine("Currently inititaiting connection with:");
-            Console.WriteLine("https://api.github.com/repos/" + repo_owner + "/" + repo + "/releases?access_token=" + token);
+            Console.WriteLine("https://api.github.com/repos/" + repo_owner + "/" + repo + "/releases");
 
-            HttpResponseMessage message = await client.PostAsync("https://api.github.com/repos/" + repo_owner + "/" + repo + "/releases?access_token=" + token, new StringContent(JObject.FromObject(release).ToString(), Encoding.UTF8, "application/json"));
+            HttpResponseMessage message = client.PostAsync("https://api.github.com/repos/" + repo_owner + "/" + repo + "/releases?access_token=" + token, new StringContent(JObject.FromObject(release).ToString(), Encoding.UTF8, "application/json")).Result;
 
 
             if (message.IsSuccessStatusCode)
             {
+                client.Dispose();
+
+                client = new HttpClient();
+                client.Timeout = TimeSpan.FromMinutes(10);
+                client.DefaultRequestHeaders.Add("User-Agent", "CLIGithubPublisher");
+
+
                 HttpContent content = message.Content;
 
-                string jsonResponse = await content.ReadAsStringAsync();
+                string jsonResponse = content.ReadAsStringAsync().Result;
 
                 JObject responseBody = JObject.Parse(jsonResponse);
 
                 string assets_url = responseBody.Value<string>("upload_url").Split('{')[0];
 
                 byte[] file = File.ReadAllBytes(filepath);
-
-
 
                 ByteArrayContent byteContent = new ByteArrayContent(file);
 
@@ -155,29 +159,29 @@ namespace CLIGithubPublisher
 
                 byteContent.Headers.Add("Content-Type", "application/zip");
 
-
-                client = new HttpClient();
-
-                client.DefaultRequestHeaders.Add("User-Agent", "CLIGithubPublisher");
-
-                HttpResponseMessage uploadstatus = await client.PostAsync(assets_url + "?name=" + Path.GetFileName(filepath) + "&access_token=" + token, byteContent);
+                
+                HttpResponseMessage uploadstatus = client.PostAsync(assets_url + "?name=" + Path.GetFileName(filepath) + "&access_token=" + token, byteContent).Result;
 
 
                 HttpContent contentuploadstatus = message.Content;
 
-                string uploadstatusResponse = await contentuploadstatus.ReadAsStringAsync();
+                string uploadstatusResponse = contentuploadstatus.ReadAsStringAsync().Result;
 
                 if (uploadstatus.IsSuccessStatusCode)
                 {
                     Console.WriteLine("Succesfully published release!");
 
                     Console.WriteLine(uploadstatusResponse);
+
+                    return true;
                 }
                 else
                 {
                     Console.WriteLine("Failed publishing release with error: " + uploadstatus.StatusCode.ToString());
 
                     Console.WriteLine(uploadstatusResponse);
+
+                    return false;
                 }
 
             }
@@ -185,13 +189,12 @@ namespace CLIGithubPublisher
             {
                 HttpContent content = message.Content;
 
-                string response = await content.ReadAsStringAsync();
+                string response = content.ReadAsStringAsync().Result;
                 Console.WriteLine("Failed creating release ;( :");
                 Console.WriteLine(response);
+
+                return false;
             }
-
-          
-
         }
     }
 }
