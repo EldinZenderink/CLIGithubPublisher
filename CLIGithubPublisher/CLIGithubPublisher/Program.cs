@@ -1,5 +1,6 @@
 ﻿using System;
 using System.IO;
+using System.Net;
 using System.Net.Http;
 using System.Text;
 using System.Threading.Tasks;
@@ -137,9 +138,9 @@ namespace CLIGithubPublisher
             {
                 client.Dispose();
 
-                client = new HttpClient();
-                client.Timeout = TimeSpan.FromMinutes(10);
-                client.DefaultRequestHeaders.Add("User-Agent", "CLIGithubPublisher");
+                // client = new HttpClient();
+                // client.Timeout = TimeSpan.FromMinutes(10);
+                //client.DefaultRequestHeaders.Add("User-Agent", "CLIGithubPublisher");
 
 
                 HttpContent content = message.Content;
@@ -152,39 +153,51 @@ namespace CLIGithubPublisher
 
                 byte[] file = File.ReadAllBytes(filepath);
 
-                ByteArrayContent byteContent = new ByteArrayContent(file);
-
 
                 Console.WriteLine("Start sending asset to: " + assets_url + "?name=" + Path.GetFileName(filepath));
+                string responseInString = "404";
+                using (var wb = new WebClient())
+                {
+                    wb.Headers.Add("User-Agent", "CLIGithubPublisher");
+                    wb.Headers.Add("Content-Type", "application/zip");
+                    var response = wb.UploadData(assets_url + "?name=" + Path.GetFileName(filepath) + "&access_token=" + token, "POST", file);
 
-                byteContent.Headers.Add("Content-Type", "application/zip");
+                    responseInString = Encoding.UTF8.GetString(response);
+                }
 
-                
-                HttpResponseMessage uploadstatus = client.PostAsync(assets_url + "?name=" + Path.GetFileName(filepath) + "&access_token=" + token, byteContent).Result;
-
-
-                HttpContent contentuploadstatus = message.Content;
-
-                string uploadstatusResponse = contentuploadstatus.ReadAsStringAsync().Result;
-
-                if (uploadstatus.IsSuccessStatusCode)
+                if (responseInString.Contains("201"))
                 {
                     Console.WriteLine("Succesfully published release!");
-
-                    Console.WriteLine(uploadstatusResponse);
-
                     return true;
-                }
-                else
-                {
-                    Console.WriteLine("Failed publishing release with error: " + uploadstatus.StatusCode.ToString());
 
-                    Console.WriteLine(uploadstatusResponse);
-
-                    return false;
                 }
 
-            }
+                return false;
+                    /*    HttpResponseMessage uploadstatus = client.PostAsync(assets_url + "?name=" + Path.GetFileName(filepath) + "&access_token=" + token, byteContent).Result;
+
+
+                        HttpContent contentuploadstatus = message.Content;
+
+                        string uploadstatusResponse = contentuploadstatus.ReadAsStringAsync().Result;
+
+                        if (uploadstatus.IsSuccessStatusCode)
+                        {
+                            Console.WriteLine("Succesfully published release!");
+
+                            Console.WriteLine(uploadstatusResponse);
+
+                            return true;
+                        }
+                        else
+                        {
+                            Console.WriteLine("Failed publishing release with error: " + uploadstatus.StatusCode.ToString());
+
+                            Console.WriteLine(uploadstatusResponse);
+
+                            return false;
+                        } */
+
+                }
             else
             {
                 HttpContent content = message.Content;
